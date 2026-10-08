@@ -12,3 +12,5 @@ Trusted pipelines:
 See `../boutique-platform/docs/jenkins-setup.md` for trust boundaries, credentials, branch protections and agent setup. Jenkins pipeline syntax is checked locally; plugin-backed Declarative validation and end-to-end jobs still require a running configured controller.
 
 The plugin input currently requests current versions. After a successful controller bootstrap and compatibility check, use `scripts/lock-plugins.py` on its installed plugin directory and replace `jenkins/controller/plugins.txt` with that resolved list. Plugin locking cannot be completed while the update center is blocked; do not call controller builds reproducible before that step.
+
+The trusted release pipeline accepts `SERVICE=incident-bridge`, using `boutique-platform/monitoring/incident-bridge` as its source context. Platform Jenkinsfile validates monitoring configs and tests/scans the adapter on an isolated builder. Monitoring image promotion is a reviewed GitOps change; app promotion remains limited to the four app services. No Jenkins jobs have been executed in this cloud runner.

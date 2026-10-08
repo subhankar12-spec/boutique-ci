@@ -2,7 +2,7 @@ pipeline {
     agent { label 'trusted-release' }
     options { timestamps(); timeout(time: 45, unit: 'MINUTES'); disableConcurrentBuilds(); skipDefaultCheckout(true) }
     parameters {
-        choice(name: 'SERVICE', choices: ['frontend','catalogue','cart','orders'])
+        choice(name: 'SERVICE', choices: ['frontend','catalogue','cart','orders','incident-bridge'])
         string(name: 'COMMIT', defaultValue: '', description: 'Reviewed full source commit SHA')
     }
     environment {
@@ -14,14 +14,16 @@ pipeline {
             steps {
                 script {
                     if (!(params.COMMIT ==~ /[a-f0-9]{40}/)) { error('Full commit SHA required') }
-                    if (!(params.SERVICE in ['frontend','catalogue','cart','orders'])) { error('Invalid service') }
+                    if (!(params.SERVICE in ['frontend','catalogue','cart','orders','incident-bridge'])) { error('Invalid service') }
+                    env.SOURCE_REPO = params.SERVICE == 'incident-bridge' ? 'boutique-platform' : 'boutique-' + params.SERVICE
+                    env.BUILD_CONTEXT = params.SERVICE == 'incident-bridge' ? 'monitoring/incident-bridge' : '.'
                 }
             }
         }
         stage('Checkout reviewed source') {
             steps {
                 deleteDir()
-                checkout([$class: 'GitSCM', branches: [[name: params.COMMIT]], userRemoteConfigs: [[url: "https://github.com/${env.GITHUB_OWNER}/boutique-${params.SERVICE}.git", credentialsId: 'github-read']]])
+                checkout([$class: 'GitSCM', branches: [[name: params.COMMIT]], userRemoteConfigs: [[url: "https://github.com/${env.GITHUB_OWNER}/${env.SOURCE_REPO}.git", credentialsId: 'github-read']]])
                 sh '''set -eu
                     git fetch origin main
                     git merge-base --is-ancestor "$COMMIT" origin/main
@@ -41,7 +43,7 @@ pipeline {
                 sh '''set -eu
                     export DOCKER_CONFIG="$WORKSPACE/.docker"
                     mkdir -p "$DOCKER_CONFIG"
-                    docker build --pull --tag "$REGISTRY/$GITHUB_OWNER/boutique-$SERVICE:$COMMIT" .
+                    docker build --pull --tag "$REGISTRY/$GITHUB_OWNER/boutique-$SERVICE:$COMMIT" "$BUILD_CONTEXT"
                     trivy image --format json --output image-scan.json --ignorefile .trivyignore.yaml --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$REGISTRY/$GITHUB_OWNER/boutique-$SERVICE:$COMMIT"
                     syft "$REGISTRY/$GITHUB_OWNER/boutique-$SERVICE:$COMMIT" -o cyclonedx-json=sbom.json
                 '''
