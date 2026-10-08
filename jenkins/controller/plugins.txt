@@ -1,0 +1,8 @@
+configuration-as-code:latest
+workflow-aggregator:latest
+git:latest
+github-branch-source:latest
+credentials-binding:latest
+timestamper:latest
+job-dsl:latest
+matrix-auth:latest

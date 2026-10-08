@@ -1,0 +1,29 @@
+name: boutique-jenkins
+services:
+  validation-controller:
+    build:
+      context: .
+      dockerfile: controller/Dockerfile
+    ports: ["127.0.0.1:8090:8080"]
+    environment:
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:?required}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?required}
+      JENKINS_URL: http://localhost:8090/
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false -Xmx1024m
+    volumes: [validation-home:/var/jenkins_home]
+    restart: unless-stopped
+  release-controller:
+    build:
+      context: .
+      dockerfile: controller/Dockerfile
+    ports: ["127.0.0.1:8091:8080"]
+    environment:
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:?required}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?required}
+      JENKINS_URL: http://localhost:8091/
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false -Xmx1024m
+    volumes: [release-home:/var/jenkins_home]
+    restart: unless-stopped
+volumes:
+  validation-home:
+  release-home:

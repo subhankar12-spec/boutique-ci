@@ -1,0 +1,20 @@
+jenkins:
+  systemMessage: "Boutique CI — isolated agents, reviewed deployments"
+  numExecutors: 0
+  mode: EXCLUSIVE
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_USER}"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    globalMatrix:
+      permissions:
+        - "Overall/Administer:${JENKINS_ADMIN_USER}"
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: true
+unclassified:
+  location:
+    url: "${JENKINS_URL}"
