@@ -76,8 +76,17 @@ PR
                                 kubeconform -strict -summary -kubernetes-version 1.34.0 -skip Certificate,Issuer "reports/lab-$environment.yaml"
                             fi
                         done
+                        for profile in nonprod production; do
+                            python3 trusted-tools/scripts/render-monitoring.py "$profile" --root candidate --lab > "reports/lab-monitoring-$profile.yaml"
+                            kubeconform -strict -summary -kubernetes-version 1.34.0 -skip Certificate "reports/lab-monitoring-$profile.yaml"
+                        done
+                        for chart in dependencies/homelab platform/external-secrets/monitoring; do
+                            helm lint --strict "candidate/$chart"
+                            helm template boutique-aux "candidate/$chart" > "reports/aux-$(basename "$chart").yaml"
+                            kubeconform -strict -summary -kubernetes-version 1.34.0 -skip ExternalSecret,SecretStore "reports/aux-$(basename "$chart").yaml"
+                        done
                         for profile in homelab nonprod production; do
-                            kubectl kustomize "candidate/monitoring/profiles/$profile" > "reports/monitoring-$profile.yaml"
+                            python3 trusted-tools/scripts/render-monitoring.py "$profile" --root candidate > "reports/monitoring-$profile.yaml"
                             kubeconform -strict -summary -kubernetes-version 1.34.0 "reports/monitoring-$profile.yaml"
                         done
                     '''
