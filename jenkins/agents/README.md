@@ -2,7 +2,7 @@
 
 The common Linux amd64 image contains Java 21 JDK, Docker 29.4.0 CLI/buildx,
 Python/PyYAML, Git, OpenSSL, jq, AWS CLI, kubectl 1.34.0, kubeconform 0.6.7,
-Terraform 1.11.4, Trivy 0.75.0, Syft 1.54.1, GitHub CLI 2.102.0,
+Helm 3.22.0, Terraform 1.11.4, Trivy 0.75.0, Syft 1.54.1, GitHub CLI 2.102.0,
 Go 1.27.2 and Maven 3.9.16. Base/CLI images are digest-pinned; Debian package
 dependencies come from a fixed signed snapshot. Official tool archives have
 reviewed SHA256/SHA512 pins checked before extraction, followed by executable

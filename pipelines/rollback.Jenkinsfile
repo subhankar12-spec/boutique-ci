@@ -34,9 +34,10 @@ pipeline {
                         withCredentials([file(credentialsId:'release-evidence-public-key',variable:'EVIDENCE_PUBLIC_KEY'),file(credentialsId:'release-artifact-public-key',variable:'RELEASE_PUBLIC_KEY')]) {
                             sh '''set -eu
                         CURRENT_IMAGE=$(python3 -c 'import sys;sys.path.insert(0,"scripts");from evidence import ROOT,selected_image;import os;print(selected_image(ROOT,os.environ["SERVICE"],os.environ["TARGET"]))')
-                        python3 scripts/rollback.py "$SERVICE" "$TARGET" "$IMAGE" --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY" --evidence evidence/verification-evidence.json --public-key "$EVIDENCE_PUBLIC_KEY" --current-image "$CURRENT_IMAGE" --max-age-hours 720
+                        python3 scripts/rollback.py "$SERVICE" "$TARGET" "$IMAGE" --chart-package release-artifacts/chart.tgz --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY" --evidence evidence/verification-evidence.json --public-key "$EVIDENCE_PUBLIC_KEY" --current-image "$CURRENT_IMAGE" --max-age-hours 720
                         ./scripts/validate.sh
-                        git diff -- services promotionrecords > planned-change.diff
+                        git add environments promotionrecords
+                        git diff --cached -- environments promotionrecords > planned-change.diff
                     '''
                         }
                         archiveArtifacts artifacts:'planned-change.diff,release-artifacts/release.json,release-artifacts/release-attestation.json',fingerprint:true

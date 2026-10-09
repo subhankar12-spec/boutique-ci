@@ -39,15 +39,15 @@ pipeline {
                         script {
                             withCredentials([file(credentialsId:'release-artifact-public-key',variable:'RELEASE_PUBLIC_KEY')]) {
                                 if (params.TARGET == 'dev') {
-                                    sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY"'
+                                    sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --chart-package release-artifacts/chart.tgz --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY"'
                                 } else {
                                     withCredentials([file(credentialsId:'release-evidence-public-key',variable:'EVIDENCE_PUBLIC_KEY')]) {
-                                        sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY" --evidence evidence/verification-evidence.json --public-key "$EVIDENCE_PUBLIC_KEY" --max-age-hours 24'
+                                        sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --chart-package release-artifacts/chart.tgz --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY" --evidence evidence/verification-evidence.json --public-key "$EVIDENCE_PUBLIC_KEY" --max-age-hours 24'
                                     }
                                 }
                             }
                         }
-                        sh './scripts/validate.sh && git diff -- services promotionrecords > planned-change.diff'
+                        sh './scripts/validate.sh && git add environments promotionrecords && git diff --cached -- environments promotionrecords > planned-change.diff'
                         archiveArtifacts artifacts:'planned-change.diff,release-artifacts/release.json,release-artifacts/release-attestation.json',fingerprint:true
                     }
                 }

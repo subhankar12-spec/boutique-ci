@@ -18,6 +18,7 @@ import urllib.request
 import zipfile
 
 TOOLS = {
+    "helm": dict(version="3.22.0", url="https://get.helm.sh/helm-v3.22.0-linux-amd64.tar.gz", sha256="1e4ab49e429626cf6c6958d914248b78c9730803c2751b87627e171dc800e7bb", kind="tar", member="linux-amd64/helm", args=["version", "--short"]),
     "kubectl": dict(version="1.34.0", url="https://dl.k8s.io/release/v1.34.0/bin/linux/amd64/kubectl", sha256="cfda68cba5848bc3b6c6135ae2f20ba2c78de20059f68789c090166d6abc3e2c", kind="binary", args=["version", "--client=true"]),
     "terraform": dict(version="1.11.4", url="https://releases.hashicorp.com/terraform/1.11.4/terraform_1.11.4_linux_amd64.zip", sha256="1ce994251c00281d6845f0f268637ba50c0005657eb3cf096b92f753b42ef4dc", kind="zip", member="terraform", args=["version"]),
     "kubeconform": dict(version="0.6.7", url="https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz", sha256="95f14e87aa28c09d5941f11bd024c1d02fdc0303ccaa23f61cef67bc92619d73", kind="tar", member="kubeconform", args=["-v"]),
@@ -27,7 +28,7 @@ TOOLS = {
     "go": dict(version="1.27.2", url="https://go.dev/dl/go1.27.2.linux-amd64.tar.gz", sha256="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5", kind="tree", directory="go", executable="bin/go", args=["version"]),
     "mvn": dict(version="3.9.16", url="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.tar.gz", sha512="831a8591fe20c8243b1dbe7d71e3244f31d1665b0804b2e825e38cbbe5ce0cafb8338851f90780735568773e0a6cd07bbec107cda0b896b008b861075358b6f6", kind="tree", directory="apache-maven-3.9.16", executable="bin/mvn", args=["--version"]),
 }
-ORIGINS = {"dl.k8s.io", "cdn.dl.k8s.io", "releases.hashicorp.com", "github.com",
+ORIGINS = {"get.helm.sh","dl.k8s.io", "cdn.dl.k8s.io", "releases.hashicorp.com", "github.com",
            "release-assets.githubusercontent.com", "objects.githubusercontent.com",
            "go.dev", "dl.google.com", "repo.maven.apache.org"}
 

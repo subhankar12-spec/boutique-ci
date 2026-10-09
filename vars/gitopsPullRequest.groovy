@@ -37,7 +37,7 @@ PROTECTION
                 git config user.name boutique-jenkins
                 git config user.email boutique-jenkins@users.noreply.github.com
                 git checkout -b "$BRANCH"
-                git add services promotionrecords
+                git add environments promotionrecords
                 if git diff --cached --quiet; then
                     echo 'No GitOps change; use verification for the current deployment.'
                     exit 1

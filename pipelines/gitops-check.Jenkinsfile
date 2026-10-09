@@ -69,10 +69,10 @@ PR
                         python3 trusted-tools/scripts/check_rendered_images.py --root candidate
                         mkdir -p reports
                         for environment in dev staging production; do
-                            kubectl kustomize "candidate/environments/$environment" > "reports/$environment.yaml"
+                            python3 trusted-tools/scripts/render.py "$environment" --root candidate > "reports/$environment.yaml"
                             kubeconform -strict -summary -kubernetes-version 1.34.0 "reports/$environment.yaml"
                             if [ -d "candidate/lab-profiles/$environment" ]; then
-                                kubectl kustomize "candidate/lab-profiles/$environment" > "reports/lab-$environment.yaml"
+                                python3 trusted-tools/scripts/render.py "$environment" --root candidate --profile lab > "reports/lab-$environment.yaml"
                                 kubeconform -strict -summary -kubernetes-version 1.34.0 -skip Certificate,Issuer "reports/lab-$environment.yaml"
                             fi
                         done

@@ -69,9 +69,9 @@ pipeline {
                                     withEnv(["BOOTSTRAP_SERVICE=${service}","BOOTSTRAP_IMAGE=${images[service]}"]) {
                                         sh '''set -eu
                                             if [ "$TARGET" = dev ]; then
-                                                python3 scripts/promote.py "$BOOTSTRAP_SERVICE" "$TARGET" "$BOOTSTRAP_IMAGE" --release-record "release-artifacts/$BOOTSTRAP_SERVICE/release-attestation.json" --release-public-key "$RELEASE_PUBLIC_KEY"
+                                                python3 scripts/promote.py "$BOOTSTRAP_SERVICE" "$TARGET" "$BOOTSTRAP_IMAGE" --chart-package "release-artifacts/$BOOTSTRAP_SERVICE/chart.tgz" --release-record "release-artifacts/$BOOTSTRAP_SERVICE/release-attestation.json" --release-public-key "$RELEASE_PUBLIC_KEY"
                                             else
-                                                python3 scripts/promote.py "$BOOTSTRAP_SERVICE" "$TARGET" "$BOOTSTRAP_IMAGE" --release-record "release-artifacts/$BOOTSTRAP_SERVICE/release-attestation.json" --release-public-key "$RELEASE_PUBLIC_KEY" --evidence "evidence/$BOOTSTRAP_SERVICE/verification-evidence.json" --public-key "$EVIDENCE_PUBLIC_KEY" --max-age-hours 24
+                                                python3 scripts/promote.py "$BOOTSTRAP_SERVICE" "$TARGET" "$BOOTSTRAP_IMAGE" --chart-package "release-artifacts/$BOOTSTRAP_SERVICE/chart.tgz" --release-record "release-artifacts/$BOOTSTRAP_SERVICE/release-attestation.json" --release-public-key "$RELEASE_PUBLIC_KEY" --evidence "evidence/$BOOTSTRAP_SERVICE/verification-evidence.json" --public-key "$EVIDENCE_PUBLIC_KEY" --max-age-hours 24
                                             fi
                                         '''
                                     }
@@ -81,7 +81,7 @@ pipeline {
                         sh '''set -eu
                             ./scripts/validate.sh
                             python3 scripts/check_rendered_images.py
-                            git add services promotionrecords
+                            git add environments promotionrecords
                             git diff --cached > planned-change.diff
                         '''
                         archiveArtifacts artifacts:'bootstrap-images.json,planned-change.diff,release-artifacts/*/release.json,release-artifacts/*/release-attestation.json',fingerprint:true
