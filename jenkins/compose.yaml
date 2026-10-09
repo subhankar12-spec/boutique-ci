@@ -4,26 +4,48 @@ services:
     build:
       context: .
       dockerfile: controller/Dockerfile
-    ports: ["127.0.0.1:8090:8080"]
+    ports:
+    - 127.0.0.1:8090:8080
     environment:
       JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:?required}
       JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?required}
-      JENKINS_URL: http://localhost:8090/
+      JENKINS_URL: ${JENKINS_VALIDATION_URL:-http://127.0.0.1:8090/}
       JAVA_OPTS: -Djenkins.install.runSetupWizard=false -Xmx1024m
-    volumes: [validation-home:/var/jenkins_home]
+      BOUTIQUE_CONTROLLER_ROLE: validation
+      BOUTIQUE_CI_LIBRARY_REF: ${BOUTIQUE_CI_LIBRARY_REF:?Set a reviewed full boutique-ci
+        commit SHA}
+      BOUTIQUE_DEV_ORIGIN: ${BOUTIQUE_DEV_ORIGIN:-https://dev.boutique.test:8443}
+      BOUTIQUE_STAGING_ORIGIN: ${BOUTIQUE_STAGING_ORIGIN:-https://staging.boutique.test:8443}
+      BOUTIQUE_PRODUCTION_ORIGIN: ${BOUTIQUE_PRODUCTION_ORIGIN:-https://production.boutique.test:9443}
+      BOUTIQUE_GITOPS_REQUIRED_CHECK: ${BOUTIQUE_GITOPS_REQUIRED_CHECK:-boutique/gitops-policy}
+      JENKINS_RELEASE_MANAGER_PASSWORD: ${JENKINS_RELEASE_MANAGER_PASSWORD:?Run scripts/init-local.sh}
+      JENKINS_PLATFORM_ADMIN_PASSWORD: ${JENKINS_PLATFORM_ADMIN_PASSWORD:?Run scripts/init-local.sh}
+    volumes:
+    - validation-home:/var/jenkins_home
     restart: unless-stopped
   release-controller:
     build:
       context: .
       dockerfile: controller/Dockerfile
-    ports: ["127.0.0.1:8091:8080"]
+    ports:
+    - 127.0.0.1:8091:8080
     environment:
       JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:?required}
       JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?required}
-      JENKINS_URL: http://localhost:8091/
+      JENKINS_URL: ${JENKINS_RELEASE_URL:-http://127.0.0.1:8091/}
       JAVA_OPTS: -Djenkins.install.runSetupWizard=false -Xmx1024m
-    volumes: [release-home:/var/jenkins_home]
+      BOUTIQUE_CONTROLLER_ROLE: release
+      BOUTIQUE_CI_LIBRARY_REF: ${BOUTIQUE_CI_LIBRARY_REF:?Set a reviewed full boutique-ci
+        commit SHA}
+      BOUTIQUE_DEV_ORIGIN: ${BOUTIQUE_DEV_ORIGIN:-https://dev.boutique.test:8443}
+      BOUTIQUE_STAGING_ORIGIN: ${BOUTIQUE_STAGING_ORIGIN:-https://staging.boutique.test:8443}
+      BOUTIQUE_PRODUCTION_ORIGIN: ${BOUTIQUE_PRODUCTION_ORIGIN:-https://production.boutique.test:9443}
+      BOUTIQUE_GITOPS_REQUIRED_CHECK: ${BOUTIQUE_GITOPS_REQUIRED_CHECK:-boutique/gitops-policy}
+      JENKINS_RELEASE_MANAGER_PASSWORD: ${JENKINS_RELEASE_MANAGER_PASSWORD:?Run scripts/init-local.sh}
+      JENKINS_PLATFORM_ADMIN_PASSWORD: ${JENKINS_PLATFORM_ADMIN_PASSWORD:?Run scripts/init-local.sh}
+    volumes:
+    - release-home:/var/jenkins_home
     restart: unless-stopped
 volumes:
-  validation-home:
-  release-home:
+  validation-home: null
+  release-home: null

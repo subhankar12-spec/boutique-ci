@@ -1,60 +1,68 @@
+@Library('boutique-ci') _
 pipeline {
-    agent { label 'trusted-deploy' }
-    options { timestamps(); timeout(time: 30, unit: 'MINUTES'); disableConcurrentBuilds(); skipDefaultCheckout(true) }
+    agent none
+    options { timestamps(); timeout(time: 45, unit: 'MINUTES'); disableConcurrentBuilds(); skipDefaultCheckout(true); lock(resource: "boutique-delivery-${params.TARGET}") }
     parameters {
-        choice(name: 'TARGET', choices: ['dev','staging','production'])
-        choice(name: 'SERVICE', choices: ['frontend','catalogue','cart','orders'])
-        string(name: 'IMAGE', defaultValue: '', description: 'ghcr.io/subhankar12-spec/boutique-service@sha256:... from release build')
+        choice(name:'TARGET',choices:['dev','staging','production'])
+        choice(name:'SERVICE',choices:['frontend','catalogue','cart','orders'])
+        string(name:'IMAGE',defaultValue:'',description:'Immutable digest recorded by a successful main build')
+        string(name:'RELEASE_BUILD',defaultValue:'',description:'Source service/main build number; artifact source is fixed')
+        string(name:'EVIDENCE_BUILD',defaultValue:'',description:'Trusted boutique-verify build for preceding environment')
+        booleanParam(name:'AUTO_MERGE_DEV',defaultValue:false,description:'Dev only; requires GitOps protected-main checks and repository auto-merge enabled')
     }
     stages {
-        stage('Validate') {
-            steps { script {
-                def prefix="ghcr.io/subhankar12-spec/boutique-${params.SERVICE}@sha256:"
-                if (!params.IMAGE.startsWith(prefix) || !(params.IMAGE.substring(prefix.length()) ==~ /[a-f0-9]{64}/)) { error('Expected service image digest') }
-            } }
-        }
-        stage('Checkout deployment configuration') {
-            steps {
-                deleteDir()
-                checkout([$class:'GitSCM',branches:[[name:'main']],userRemoteConfigs:[[url:'https://github.com/subhankar12-spec/boutique-gitops.git',credentialsId:'github-read']]])
-            }
-        }
-        stage('Verify promotion chain') {
-            steps {
-                sh '''set -eu
-                    python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE"
-                    ./scripts/validate.sh
-                '''
-            }
-        }
-        stage('Production gate') {
-            when { expression { params.TARGET == 'production' } }
-            steps {
-                // Configure this group in Jenkins authorization. Jenkins admins can still override gates.
-                input message: 'Confirm staging smoke tests passed for this release and review migration compatibility.', submitter: 'release-managers'
-            }
-        }
-        stage('Open reviewed GitOps PR') {
-            steps {
-                withCredentials([usernamePassword(credentialsId:'gitops-pr',usernameVariable:'GIT_USER',passwordVariable:'GH_TOKEN')]) {
-                    sh '''set +x
-                        set -eu
-                        BRANCH="promote/$TARGET/$SERVICE/$BUILD_NUMBER"
-                        git config user.name 'boutique-jenkins'
-                        git config user.email 'boutique-jenkins@users.noreply.github.com'
-                        git checkout -b "$BRANCH"
-                        git add services
-                        if git diff --cached --quiet; then echo 'Image already selected'; exit 0; fi
-                        git commit -m "Promote $SERVICE to $TARGET"
-                        ASKPASS=$(mktemp)
-                        trap 'rm -f "$ASKPASS"' EXIT
-                        printf '#!/bin/sh\ncase "$1" in *Username*) printf "%%s" "$GIT_USER";; *) printf "%%s" "$GH_TOKEN";; esac\n' > "$ASKPASS"
-                        chmod 700 "$ASKPASS"
-                        GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git push origin "$BRANCH"
-                        gh pr create --base main --head "$BRANCH" --title "Promote $SERVICE to $TARGET" --body "Digest: $IMAGE. Jenkins build: $BUILD_URL. Review staging evidence and migrations before merging."
-                    '''
+        stage('Prepare and merge delivery change') {
+            agent { label 'trusted-deploy' }
+            stages {
+                stage('Validate request') {
+                    steps { script {
+                            if (!(params.TARGET in ['dev','staging','production']) || !(params.SERVICE in ['frontend','catalogue','cart','orders'])) { error('Invalid target/service') }
+                            if (!(params.IMAGE ==~ /ghcr\.io\/subhankar12-spec\/boutique-[a-z-]+@sha256:[a-f0-9]{64}/) || !params.IMAGE.startsWith("ghcr.io/subhankar12-spec/boutique-${params.SERVICE}@")) { error('Expected service image digest') }
+                            if (params.AUTO_MERGE_DEV && params.TARGET != 'dev') { error('Automatic merging is limited to dev') }
+                            if (params.TARGET != 'dev' && !(params.EVIDENCE_BUILD ==~ /[1-9][0-9]*/)) { error('Preceding-environment verification build is required') }
+                        } }
                 }
+                stage('Checkout trusted GitOps source') {
+                    steps {
+                        deleteDir()
+                        checkout([$class:'GitSCM',branches:[[name:'main']],userRemoteConfigs:[[url:'https://github.com/subhankar12-spec/boutique-gitops.git',credentialsId:'github-read']]])
+                        sh 'if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --unshallow origin; else git fetch origin main; fi'
+                    }
+                }
+                stage('Verify published release') { steps { releaseArtifact() } }
+                stage('Retrieve trusted verification') {
+                    when { expression { params.TARGET != 'dev' } }
+                    steps { copyArtifacts projectName:'boutique-verify', selector:specific(params.EVIDENCE_BUILD), filter:'verification-evidence.json', target:'evidence', flatten:true }
+                }
+                stage('Plan verified promotion') {
+                    steps {
+                        script {
+                            withCredentials([file(credentialsId:'release-artifact-public-key',variable:'RELEASE_PUBLIC_KEY')]) {
+                                if (params.TARGET == 'dev') {
+                                    sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY"'
+                                } else {
+                                    withCredentials([file(credentialsId:'release-evidence-public-key',variable:'EVIDENCE_PUBLIC_KEY')]) {
+                                        sh 'python3 scripts/promote.py "$SERVICE" "$TARGET" "$IMAGE" --release-record release-artifacts/release-attestation.json --release-public-key "$RELEASE_PUBLIC_KEY" --evidence evidence/verification-evidence.json --public-key "$EVIDENCE_PUBLIC_KEY" --max-age-hours 24'
+                                    }
+                                }
+                            }
+                        }
+                        sh './scripts/validate.sh && git diff -- services promotionrecords > planned-change.diff'
+                        archiveArtifacts artifacts:'planned-change.diff,release-artifacts/release.json,release-artifacts/release-attestation.json',fingerprint:true
+                    }
+                }
+                stage('Production approval') {
+                    when { expression { params.TARGET == 'production' } }
+                    steps { input message:'Review the planned diff, signed staging verification and migration compatibility before production promotion.',submitter:'release-manager' }
+                }
+                stage('Merge reviewed GitOps change') { steps { gitopsPullRequest(action:'promote') } }
+
             }
+            post { always { archiveArtifacts artifacts:'planned-change.diff,gitops-pr-url.txt,release-artifacts/release.json,release-artifacts/release-attestation.json',allowEmptyArchive:true } }
+        }
+        stage('Verify synchronized deployment') {
+            steps { build job:'boutique-verify',wait:true,propagate:true,parameters:[string(name:'TARGET',value:params.TARGET),string(name:'SERVICE',value:params.SERVICE),string(name:'IMAGE',value:params.IMAGE),string(name:'GITOPS_COMMIT',value:env.MERGED_GITOPS_COMMIT)] }
         }
     }
+
 }

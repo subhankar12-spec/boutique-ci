@@ -1,3 +1,6 @@
 jenkins/.env
 jenkins/plugin-cache/
 *.log
+jenkins/.delivery-secrets/
+__pycache__/
+*.py[cod]

@@ -1,4 +1,4 @@
-['frontend','catalogue','cart','orders'].each { service ->
+['frontend','catalogue','cart','orders','platform','gitops'].each { service ->
  multibranchPipelineJob("boutique-${service}") {
   branchSources {
    github {

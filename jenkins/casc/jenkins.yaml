@@ -1,20 +1,54 @@
 jenkins:
-  systemMessage: "Boutique CI — isolated agents, reviewed deployments"
+  systemMessage: "Boutique CI \u2014 isolated agents, reviewed deployments"
   numExecutors: 0
   mode: EXCLUSIVE
   securityRealm:
     local:
       allowsSignup: false
       users:
-        - id: "${JENKINS_ADMIN_USER}"
-          password: "${JENKINS_ADMIN_PASSWORD}"
+      - id: ${JENKINS_ADMIN_USER}
+        password: ${JENKINS_ADMIN_PASSWORD}
+      - id: release-manager
+        password: ${JENKINS_RELEASE_MANAGER_PASSWORD}
+      - id: platform-admin
+        password: ${JENKINS_PLATFORM_ADMIN_PASSWORD}
   authorizationStrategy:
     globalMatrix:
       permissions:
-        - "Overall/Administer:${JENKINS_ADMIN_USER}"
+      - Overall/Administer:${JENKINS_ADMIN_USER}
+      - Overall/Read:release-manager
+      - Job/Read:release-manager
+      - Overall/Read:platform-admin
+      - Job/Read:platform-admin
   crumbIssuer:
-    standard:
-      excludeClientIPFromCrumb: true
+    standard: {}
+  globalNodeProperties:
+  - envVars:
+      env:
+      - key: BOUTIQUE_CONTROLLER_ROLE
+        value: ${BOUTIQUE_CONTROLLER_ROLE}
+      - key: BOUTIQUE_DEV_ORIGIN
+        value: ${BOUTIQUE_DEV_ORIGIN}
+      - key: BOUTIQUE_STAGING_ORIGIN
+        value: ${BOUTIQUE_STAGING_ORIGIN}
+      - key: BOUTIQUE_PRODUCTION_ORIGIN
+        value: ${BOUTIQUE_PRODUCTION_ORIGIN}
+      - key: BOUTIQUE_GITOPS_REQUIRED_CHECK
+        value: ${BOUTIQUE_GITOPS_REQUIRED_CHECK}
 unclassified:
   location:
-    url: "${JENKINS_URL}"
+    url: ${JENKINS_URL}
+  globalUntrustedLibraries:
+    libraries:
+    - name: boutique-ci
+      defaultVersion: ${BOUTIQUE_CI_LIBRARY_REF}
+      allowVersionOverride: false
+      implicit: false
+      includeInChangesets: true
+      retriever:
+        modernSCM:
+          scm:
+            git:
+              id: boutique-ci-shared-library
+              remote: https://github.com/subhankar12-spec/boutique-ci.git
+              credentialsId: github-read

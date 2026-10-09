@@ -1,0 +1,9 @@
+# Only the reviewed installer is needed from the boutique-ci build context.
+# Exclude controller configuration, local credentials, Git and runtime files.
+**
+!jenkins/
+!jenkins/scripts/
+!jenkins/scripts/install-agent-tools.py
+!jenkins/agents/
+!jenkins/agents/Dockerfile
+!jenkins/agents/Dockerfile.dockerignore

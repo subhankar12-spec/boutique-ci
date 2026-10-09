@@ -1,16 +1,34 @@
 # Jenkins delivery
 
-`vars/servicePipeline.groovy` is PR validation only. Service Dockerfiles execute unit tests, then Jenkins checks source secrets, scans the built runtime with Trivy and generates a CycloneDX SBOM with Syft. Fixable HIGH/CRITICAL vulnerabilities fail the build. Unfixed findings remain visible and require review; the gate is not a clean bill of security.
+This repository provides the shared service pipeline, two-controller configuration and the common deployment jobs for the Boutique project. Each application service remains in its own repository. See [Jenkins setup](../boutique-platform/docs/jenkins-setup.md) for installation, credentials and branch protection.
 
-Trusted pipelines:
+`vars/servicePipeline.groovy` supplies both PR validation and protected-main release behavior. Validation runs on disposable agents attached to the validation controller. Protected-main builds run on the release controller, execute Dockerfile tests, scan source secrets and the runtime image, generate a CycloneDX SBOM, then publish the tested image to GHCR and sign its release record. Fixable HIGH/CRITICAL findings fail the image gate; unfixed findings remain visible for review. Source-SHA tags are not overwritten.
 
-- `pipelines/release.Jenkinsfile`: accepts a reviewed full source SHA reachable from main; builds/tests/scans once, publishes that same image, records digest and SBOM. Orders releases require a reviewed RDS trust bundle.
-- `pipelines/promote.Jenkinsfile`: validates image ownership/digest and preceding environment, validates manifests, opens a GitOps PR; production has an approval gate.
-- `pipelines/verify.Jenkinsfile`: checks rollout status and the full HTTP smoke suite; archives the deployed image selection.
-- Terraform pipeline lives in `boutique-infrastructure/Jenkinsfile` so SCM checkout resolves the infrastructure source.
+Four application services normally trigger dev delivery after publication once a complete digest-based dev baseline exists. For the first complete installation, build each with `DELIVER_TO_DEV=false`, then use `boutique-bootstrap` to collect their signed artifacts and create one complete dev change. Initialize staging and production through the same aggregate job with matching preceding-environment evidence before switching those environments to individual service promotion. `boutique-platform/main` also releases the incident adapter, including its real PostgreSQL queue integration tests; monitoring image selection remains an explicit reviewed GitOps change.
 
-See `../boutique-platform/docs/jenkins-setup.md` for trust boundaries, credentials, branch protections and agent setup. Jenkins pipeline syntax is checked locally; plugin-backed Declarative validation and end-to-end jobs still require a running configured controller.
+## Shared jobs
 
-The plugin input currently requests current versions. After a successful controller bootstrap and compatibility check, use `scripts/lock-plugins.py` on its installed plugin directory and replace `jenkins/controller/plugins.txt` with that resolved list. Plugin locking cannot be completed while the update center is blocked; do not call controller builds reproducible before that step.
+| Job | Behavior |
+|---|---|
+| `boutique-bootstrap` | Collect four signed releases and preceding-environment evidence, prepare an initial environment PR and verify each digest |
+| `boutique-promote` | Verify release provenance and preceding-environment evidence, review production approval, merge a GitOps PR and verify rollout |
+| `boutique-gitops-check` | Use protected tools to validate signed delivery records, current PR base and rendered resources; publish `boutique/gitops-policy` |
+| `boutique-verify` | Wait for Argo/rollouts, check native runtime images, run HTTPS smoke tests and sign measured evidence |
+| `boutique-rollback` | Restore a previously verified same-environment digest through a reviewed GitOps PR and fresh verification |
+| `boutique-infrastructure` | Plan Terraform, archive a redacted action summary and optionally approve/apply the exact private saved plan |
 
-The trusted release pipeline accepts `SERVICE=incident-bridge`, using `boutique-platform/monitoring/incident-bridge` as its source context. Platform Jenkinsfile validates monitoring configs and tests/scans the adapter on an isolated builder. Monitoring image promotion is a reviewed GitOps change; app promotion remains limited to the four app services. No Jenkins jobs have been executed in this cloud runner.
+The release and delivery parents use `agent none` outside their working stages, freeing executors before waiting for deployment verification. Promotion and rollback hold a common environment lock through verification. The policy job uses a separate `policy-check` executor while the deployment workspace waits for it. Provision that executor; assigning policy work to the occupied deploy executor would deadlock.
+
+The two controllers form the credential boundary. PR-controlled code runs only on validation, which receives no registry publishing, GitOps write, private signing or cloud credentials. The shared library is configured as an untrusted Jenkins library with a reviewed pinned commit and version overrides disabled. Protect its source, trusted job definitions and policy tools with review and CODEOWNERS.
+
+## Runtime and plugin maintenance
+
+The controller pins Jenkins 2.580.1 and a checksum-locked set of 74 plugin artifacts. `jenkins/scripts/install-locked-plugins.py` verifies official SHA-256 values, rather than resolving floating plugin versions during every build. Review and exercise dependency upgrades before regenerating the lock with `scripts/lock-plugins.py`.
+
+```bash
+python3 jenkins/scripts/doctor.py
+install -d -m 700 /tmp/boutique-jenkins-check
+python3 jenkins/scripts/smoke-controller.py --directory /tmp/boutique-jenkins-check
+```
+
+The repeatable smoke command requires Java 21, a private external cache and official archive access. It checks the locked runtime, JCasC, plugin-backed Declarative/Job DSL behavior and isolated job coordination without real GitHub/cloud credentials. These checks have been exercised on the cloud runner. They do not establish GHCR publication, remote agent provisioning or Jenkins-to-cluster delivery. See [validation evidence](../boutique-platform/docs/validation.md) for the remaining acceptance work.
