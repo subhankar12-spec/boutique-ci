@@ -48,18 +48,22 @@ The controller Compose ports bind to loopback. On Linux, host networking lets a 
 
 ```bash
 : "${BOUTIQUE_AGENT_SECRET_FILE:?Set the private agent-secret file path}"
-: "${BOUTIQUE_AGENT_WORKSPACE:?Set this node's private workspace path}"
+: "${BOUTIQUE_AGENT_WORKSPACE:?Set the node private workspace path}"
 docker run --rm --name boutique-trusted-deploy --network host \
   --user "$(id -u):$(id -g)" \
   -e JENKINS_URL="${JENKINS_RELEASE_URL:-http://127.0.0.1:8091/}" \
   -e JENKINS_AGENT_NAME=boutique-trusted-deploy \
   -e JENKINS_WEB_SOCKET=true \
-  -e JENKINS_SECRET_FILE=/run/secrets/agent-secret \
   -e JENKINS_AGENT_WORKDIR=/workspace \
   -v "$BOUTIQUE_AGENT_SECRET_FILE:/run/secrets/agent-secret:ro" \
   -v "$BOUTIQUE_AGENT_WORKSPACE:/workspace" \
-  boutique-agent:local
+  boutique-agent:local -secret @/run/secrets/agent-secret
 ```
+
+The official entrypoint does not read a secret-file environment variable.
+The explicit `-secret @/run/secrets/agent-secret` argument makes Remoting read
+the mounted file without putting the secret value in Docker environment settings
+or the host command line.
 
 For validation use its separately registered node name, the validation controller URL (port 8090), and a separate secret/workspace. WebSocket mode needs no exposed TCP remoting port. Agent secrets are generated for Jenkins nodes; they are not GitHub tokens or registry credentials.
 
