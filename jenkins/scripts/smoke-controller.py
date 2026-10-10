@@ -130,7 +130,10 @@ passwordFile.delete()
             yaml = (ROOT / 'jenkins/casc/jenkins.yaml').read_text()
             values = {'JENKINS_ADMIN_USER': 'validation-admin', 'JENKINS_ADMIN_PASSWORD': 'isolated-schema-placeholder',
                       'JENKINS_PLATFORM_ADMIN_PASSWORD': secrets.token_urlsafe(32),
-                      'BOUTIQUE_CONTROLLER_ROLE': 'release', 'JENKINS_URL': origin + '/', 'BOUTIQUE_CI_LIBRARY_REF': '1' * 40}
+                      'BOUTIQUE_CONTROLLER_ROLE': 'release', 'JENKINS_URL': origin + '/', 'BOUTIQUE_CI_LIBRARY_REF': '1' * 40,
+                      'BOUTIQUE_DEV_ORIGIN': 'https://dev.boutique.test:8443',
+                      'BOUTIQUE_STAGING_ORIGIN': 'https://staging.boutique.test:8443',
+                      'BOUTIQUE_PRODUCTION_ORIGIN': 'https://production.boutique.test:9443'}
             for key, value in values.items():
                 yaml = yaml.replace('${' + key + '}', value)
             encoded = base64.b64encode(yaml.encode()).decode()

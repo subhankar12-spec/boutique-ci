@@ -2,8 +2,8 @@
 
 The common Linux amd64 image contains Java 21 JDK, Docker 29.4.0 CLI/buildx,
 Python/PyYAML, Git, OpenSSL, jq, AWS CLI, kubectl 1.34.0, kubeconform 0.6.7,
-Helm 3.22.0, Terraform 1.11.4, Trivy 0.75.0, Syft 1.54.1, GitHub CLI 2.102.0,
-Go 1.27.2 and Maven 3.9.16. Base/CLI images are digest-pinned; Debian package
+Helm 3.22.0, Terraform 1.11.4, Trivy 0.75.0, Syft 1.54.1 and GitHub CLI 2.102.0.
+Base/CLI images are digest-pinned; Debian package
 dependencies come from a fixed signed snapshot. Official tool archives have
 reviewed SHA256/SHA512 pins checked before extraction, followed by executable
 hash/version checks. Pins require reviewed updates and image scans; they do
@@ -21,12 +21,15 @@ To verify tools independently, run the installer and add its `bin` directory to 
 python3 jenkins/scripts/install-agent-tools.py --destination /absolute/path/tools
 ```
 
-Java 21 must already be installed for Maven. `--verify-only` checks the stored executable
+Java 21 is required for Jenkins Remoting, supplied by the inbound-agent base. `--verify-only` checks the stored executable
 hashes and versions without downloads. Run
 `python3 jenkins/scripts/test-agent-tools.py` for checksum, trusted-origin and
 archive-traversal rejection checks. The Dockerfile-specific ignore file limits
 its build context to the installer and build definition, excluding controller
 credentials/configuration and Git.
+
+Go, Maven, Node and application Python test dependencies live in the service
+Dockerfile test targets. They do not need to be installed on the common agent.
 
 The controller has zero executors. For reviewed main builds, create one private
 inbound agent with label `trusted-release` and one executor. The Pipeline seed,

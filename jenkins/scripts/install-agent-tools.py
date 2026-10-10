@@ -25,12 +25,9 @@ TOOLS = {
     "trivy": dict(version="0.75.0", url="https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz", sha256="c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f", kind="tar", member="trivy", args=["--version"]),
     "syft": dict(version="1.54.1", url="https://github.com/anchore/syft/releases/download/v1.54.1/syft_1.54.1_linux_amd64.tar.gz", sha256="c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47", kind="tar", member="syft", args=["version"]),
     "gh": dict(version="2.102.0", url="https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz", sha256="bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386", kind="tar", member="gh_2.102.0_linux_amd64/bin/gh", args=["--version"]),
-    "go": dict(version="1.27.2", url="https://go.dev/dl/go1.27.2.linux-amd64.tar.gz", sha256="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5", kind="tree", directory="go", executable="bin/go", args=["version"]),
-    "mvn": dict(version="3.9.16", url="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.tar.gz", sha512="831a8591fe20c8243b1dbe7d71e3244f31d1665b0804b2e825e38cbbe5ce0cafb8338851f90780735568773e0a6cd07bbec107cda0b896b008b861075358b6f6", kind="tree", directory="apache-maven-3.9.16", executable="bin/mvn", args=["--version"]),
 }
 ORIGINS = {"get.helm.sh","dl.k8s.io", "cdn.dl.k8s.io", "releases.hashicorp.com", "github.com",
-           "release-assets.githubusercontent.com", "objects.githubusercontent.com",
-           "go.dev", "dl.google.com", "repo.maven.apache.org"}
+           "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
 
 
 def trusted_url(url):
@@ -78,14 +75,7 @@ def install(name, tool, archive_path, root):
             with archive.extractfile(member) as source, executable.open("wb") as output:
                 shutil.copyfileobj(source, output)
     else:
-        destination = root / "lib" / tool["directory"]
-        if destination.exists():
-            raise ValueError("Tool tree already exists; install into a clean destination")
-        with tarfile.open(archive_path) as archive:
-            if any(not member.name.startswith(tool["directory"] + "/") and member.name != tool["directory"] for member in archive.getmembers()):
-                raise ValueError("Unexpected archive root")
-            archive.extractall(root / "lib", filter="data")
-        executable.symlink_to(destination / tool["executable"])
+        raise ValueError("Unsupported artifact kind")
     executable.chmod(0o755)
     return executable
 
@@ -118,7 +108,6 @@ def main():
         verify(root, manifest)
         return
     (root / "bin").mkdir(parents=True, exist_ok=True)
-    (root / "lib").mkdir(exist_ok=True)
     manifest = {}
     with tempfile.TemporaryDirectory(prefix="verified-agent-tools-") as temporary:
         for name in args.only:

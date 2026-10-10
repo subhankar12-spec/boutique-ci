@@ -32,15 +32,15 @@ class VerifiedArtifactTests(unittest.TestCase):
     def test_archive_tree_cannot_escape_install_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "lib").mkdir()
             (root / "bin").mkdir()
             archive_path = root / "bad.tar.gz"
             with tarfile.open(archive_path, "w:gz") as archive:
-                member = tarfile.TarInfo("go/../../escaped")
-                member.size = 1
-                archive.addfile(member, io.BytesIO(b"x"))
-            with self.assertRaises(tarfile.OutsideDestinationError):
-                tools.install("go", tools.TOOLS["go"], archive_path, root)
+                member = tarfile.TarInfo("kubeconform")
+                member.type = tarfile.SYMTYPE
+                member.linkname = "../../escaped"
+                archive.addfile(member)
+            with self.assertRaisesRegex(ValueError, "regular binary"):
+                tools.install("kubeconform", tools.TOOLS["kubeconform"], archive_path, root)
             self.assertFalse((root / "escaped").exists())
 
 

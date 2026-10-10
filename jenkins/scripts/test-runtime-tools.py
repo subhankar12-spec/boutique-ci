@@ -18,7 +18,7 @@ def load(name, path):
     return module
 
 
-locker = load('locker', ROOT / 'scripts/lock-plugins.py')
+locker = load('locker', ROOT / 'jenkins/scripts/lock-plugins.py')
 installer = load('installer', ROOT / 'jenkins/scripts/install-locked-plugins.py')
 validator = load('validator', ROOT / 'jenkins/scripts/validate-pipelines.py')
 

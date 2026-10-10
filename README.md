@@ -87,3 +87,5 @@ post-deployment smoke checks remain separate.
 Existing Jenkins installations need the **JUnit** plugin and its dependencies
 before selecting this library revision. The fresh controller's checksum lock
 includes it. Installing a plugin does not require replacing Jenkins home/JCasC.
+
+See the [file-by-file CI audit](docs/file-audit.md) for every retained file, optional installation tools and validation boundaries.
