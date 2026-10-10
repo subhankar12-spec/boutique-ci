@@ -17,7 +17,6 @@ services:
       BOUTIQUE_DEV_ORIGIN: ${BOUTIQUE_DEV_ORIGIN:-https://dev.boutique.test:8443}
       BOUTIQUE_STAGING_ORIGIN: ${BOUTIQUE_STAGING_ORIGIN:-https://staging.boutique.test:8443}
       BOUTIQUE_PRODUCTION_ORIGIN: ${BOUTIQUE_PRODUCTION_ORIGIN:-https://production.boutique.test:9443}
-      JENKINS_RELEASE_MANAGER_PASSWORD: ${JENKINS_RELEASE_MANAGER_PASSWORD:?Run scripts/init-local.sh}
       JENKINS_PLATFORM_ADMIN_PASSWORD: ${JENKINS_PLATFORM_ADMIN_PASSWORD:?Run scripts/init-local.sh}
     volumes:
     - release-home:/var/jenkins_home

@@ -1,6 +1,10 @@
 // The Pipeline seed defaults to manual builds while initial delivery is configured.
 def suppressBuilds = binding.hasVariable('suppressAutomaticBuilds') && binding.getVariable('suppressAutomaticBuilds')
-['frontend','catalogue','cart','orders','platform'].each { service ->
+def services = ['frontend','catalogue','cart','orders']
+if (binding.hasVariable('enableIncidentBridgeBuild') && binding.getVariable('enableIncidentBridgeBuild')) {
+ services << 'platform'
+}
+services.each { service ->
  multibranchPipelineJob("boutique-${service}") {
   branchSources {
    github {

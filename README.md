@@ -61,3 +61,11 @@ python3 jenkins/scripts/smoke-controller.py --directory /tmp/boutique-jenkins-ch
 The single-controller Compose profile is for a fresh install; it preserves the
 previous release-home volume name and does not migrate a manually created Jenkins
 container. Preserve existing homes and private credentials during upgrades.
+
+See the [current CI/platform file map](https://github.com/subhankar12-spec/boutique-platform/blob/main/docs/repository-map.md) for core files, optional
+exercises and the removed legacy components.
+
+The ServiceNow adapter build is opt-in in the seed with
+`ENABLE_INCIDENT_BRIDGE_BUILD=true`. If an earlier seed already created
+`boutique-platform`, disable that Jenkins job when the integration is unused;
+removedJobAction=IGNORE deliberately preserves existing jobs.

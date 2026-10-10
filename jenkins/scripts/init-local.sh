@@ -12,7 +12,6 @@ names={line.split('=',1)[0] for line in existing.splitlines() if '=' in line}
 defaults={
     'JENKINS_ADMIN_USER':'admin',
     'JENKINS_ADMIN_PASSWORD':secrets.token_urlsafe(40),
-    'JENKINS_RELEASE_MANAGER_PASSWORD':secrets.token_urlsafe(40),
     'JENKINS_PLATFORM_ADMIN_PASSWORD':secrets.token_urlsafe(40),
     'BOUTIQUE_CI_LIBRARY_REF':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
 }

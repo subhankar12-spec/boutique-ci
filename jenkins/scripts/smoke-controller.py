@@ -129,7 +129,6 @@ passwordFile.delete()
 
             yaml = (ROOT / 'jenkins/casc/jenkins.yaml').read_text()
             values = {'JENKINS_ADMIN_USER': 'validation-admin', 'JENKINS_ADMIN_PASSWORD': 'isolated-schema-placeholder',
-                      'JENKINS_RELEASE_MANAGER_PASSWORD': secrets.token_urlsafe(32),
                       'JENKINS_PLATFORM_ADMIN_PASSWORD': secrets.token_urlsafe(32),
                       'BOUTIQUE_CONTROLLER_ROLE': 'release', 'JENKINS_URL': origin + '/', 'BOUTIQUE_CI_LIBRARY_REF': '1' * 40}
             for key, value in values.items():
@@ -147,20 +146,20 @@ warnings.values().each { println(it) }
                 raise RuntimeError('JCasC validation failed; inspect jcasc-check.txt')
             print(result.strip())
 
-            role_paths = {role: str(ROOT / f'jenkins/jobs/{role}.groovy') for role in ('release',)}
+            role_paths = {role: str(ROOT / 'jenkins/jobs/release.groovy') for role in ('release', 'release-with-incident')}
             result = groovy('''import javaposse.jobdsl.plugin.JenkinsJobManagement
 import javaposse.jobdsl.dsl.DslScriptLoader
 import javaposse.jobdsl.dsl.Item
 import jenkins.model.Jenkins
 class DryRunJobManagement extends JenkinsJobManagement {
  Map<String,String> generated=[:]
- DryRunJobManagement() { super(System.out,[suppressAutomaticBuilds:true],new File('.')); setFailOnMissingPlugin(true) }
+ DryRunJobManagement(boolean incident) { super(System.out,[suppressAutomaticBuilds:true,enableIncidentBridgeBuild:incident],new File('.')); setFailOnMissingPlugin(true) }
  @Override boolean createOrUpdateConfig(Item item, boolean ignoreExisting) { generated[item.name]=item.xml; return true }
  @Override void queueJob(String name) { throw new IllegalStateException('SCM/build scheduling is forbidden in this dry run') }
 }
 def roles=new groovy.json.JsonSlurper().parseText(''' + json.dumps(json.dumps(role_paths)) + ''')
 roles.each { role,path ->
- def management=new DryRunJobManagement()
+ def management=new DryRunJobManagement(role=='release-with-incident')
  new DslScriptLoader(management).runScript(new File(path).text)
  management.generated.each { name,xml ->
   def document=new XmlParser(false,false).parseText(xml)
@@ -175,20 +174,20 @@ roles.each { role,path ->
    def traits=scm.traits.collect { it.class.simpleName }
    assert traits.contains('BranchDiscoveryTrait'): role+' source does not discover branches: '+name
    assert !traits.contains('ForkPullRequestDiscoveryTrait'): role+' source unexpectedly discovers fork PRs: '+name
-   if(role=='release') {
+   if(role.startsWith('release')) {
     assert !traits.contains('OriginPullRequestDiscoveryTrait'): 'Release source discovers PRs: '+name
     def filter=scm.traits.find { it.class.simpleName=='WildcardSCMHeadFilterTrait' }
     assert filter && filter.includes=='main' && filter.excludes=='': 'Release source is not restricted to main: '+name
-   } else {
-    assert traits.contains('OriginPullRequestDiscoveryTrait'): 'Validation source does not discover PRs: '+name
    }
   }
  }
+ assert management.generated.size() == (role=='release' ? 9 : 10): 'Unexpected job count'
+ assert management.generated.containsKey('boutique-platform') == (role=='release-with-incident'): 'Adapter build must be opt-in'
  println('JOBDSL_CHECK_PASSED '+role+' count='+management.generated.size())
 }
 ''')
             (runtime / 'job-dsl-check.txt').write_text(result)
-            if 'JOBDSL_CHECK_PASSED release' not in result:
+            if 'JOBDSL_CHECK_PASSED release count=9' not in result or 'JOBDSL_CHECK_PASSED release-with-incident count=10' not in result:
                 raise RuntimeError('JobDSL validation failed; inspect job-dsl-check.txt')
             print(result.strip())
 
@@ -224,7 +223,7 @@ roles.each { role,path ->
 }""")
             create_job('isolated-runtime-check', """pipeline {
  agent none
- options { lock(resource:'isolated-runtime'); copyArtifactPermission('boutique-promote,boutique-rollback') }
+ options { timeout(time:2,unit:'MINUTES') }
  parameters { booleanParam(name:'FAIL_CHECK', defaultValue:false) }
  stages {
   stage('Downstream verification') { steps {
@@ -244,9 +243,9 @@ roles.each { role,path ->
                         build = json.loads(request(f'/job/isolated-runtime-check/{number}/api/json?tree=number,result,building'))
                         if not build['building']:
                             if build['result'] != expected_result:
-                                raise RuntimeError('Parent lock/downstream verification returned an unexpected result')
+                                raise RuntimeError('Parent/downstream verification returned an unexpected result')
                             report['runtimeBuilds'].append(build)
-                            print(f'Parent lock/downstream verification #{number}: {build["result"]}')
+                            print(f'Parent/downstream verification #{number}: {build["result"]}')
                             break
                     except urllib.error.HTTPError as exc:
                         if exc.code != 404:

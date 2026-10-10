@@ -8,16 +8,12 @@ jenkins:
       users:
       - id: ${JENKINS_ADMIN_USER}
         password: ${JENKINS_ADMIN_PASSWORD}
-      - id: release-manager
-        password: ${JENKINS_RELEASE_MANAGER_PASSWORD}
       - id: platform-admin
         password: ${JENKINS_PLATFORM_ADMIN_PASSWORD}
   authorizationStrategy:
     globalMatrix:
       permissions:
       - Overall/Administer:${JENKINS_ADMIN_USER}
-      - Overall/Read:release-manager
-      - Job/Read:release-manager
       - Overall/Read:platform-admin
       - Job/Read:platform-admin
   crumbIssuer:

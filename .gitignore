@@ -1,6 +1,7 @@
 jenkins/.env
 jenkins/plugin-cache/
 *.log
+# Retired local signing keys remain private if present during migration.
 jenkins/.delivery-secrets/
 __pycache__/
 *.py[cod]
