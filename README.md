@@ -5,7 +5,7 @@ an inbound `trusted-release` agent. Each service has a Jenkinsfile calling the
 version-pinned, sandboxed shared library. Independent service repositories remain.
 
 The shared pipeline checks out source, runs a secret scan, validates/packages
-Helm, builds the Dockerfile (including its test stages), scans the runtime image,
+Helm, runs a separate **Test** stage, builds the runtime image, scans it,
 generates an SBOM and publishes a source-tagged image and chart to GHCR. Artifacts
 include the immutable image digest, source commit, scan/SBOM and chart package.
 Existing source tags/chart versions are not overwritten.
@@ -69,3 +69,21 @@ The ServiceNow adapter build is opt-in in the seed with
 `ENABLE_INCIDENT_BRIDGE_BUILD=true`. If an earlier seed already created
 `boutique-platform`, disable that Jenkins job when the integration is unused;
 removedJobAction=IGNORE deliberately preserves existing jobs.
+
+## Separate test and image stages
+
+`Test` builds the service Dockerfile's `test` target, then runs it as a disposable
+container running as the agent UID, with a writable temporary home. The service's
+`ci/test.sh` runs tests afresh and writes JUnit XML into
+`test-reports/` through a report-only workspace mount. The agent and its private
+Docker daemon must see that workspace at the same absolute path.
+Jenkins publishes individual results and archives reports even when tests fail.
+A nonzero runner exit fails the build; missing reports fail validation; unstable
+test results also skip subsequent stages. `Build image` then builds the final
+runtime target, whose Dockerfile no longer executes tests as build instructions.
+Test containers receive no publication credentials. Integration tests and
+post-deployment smoke checks remain separate.
+
+Existing Jenkins installations need the **JUnit** plugin and its dependencies
+before selecting this library revision. The fresh controller's checksum lock
+includes it. Installing a plugin does not require replacing Jenkins home/JCasC.

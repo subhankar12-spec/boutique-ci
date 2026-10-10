@@ -253,6 +253,57 @@ roles.each { role,path ->
                     time.sleep(.5)
                 else:
                     raise RuntimeError('Isolated Declarative build exceeded 60 seconds')
+            # This local executor exists only in the disposable fixture controller.
+            # The production JCasC was validated with zero built-in executors above.
+            groovy('jenkins.model.Jenkins.get().setNumExecutors(1)')
+            create_job('isolated-test-gate', """pipeline {
+ agent any
+ options { skipStagesAfterUnstable() }
+ parameters {
+  booleanParam(name:'FAIL_TEST', defaultValue:false)
+  booleanParam(name:'REPORT_ONLY_FAILURE', defaultValue:false)
+ }
+ stages {
+  stage('Test') {
+   steps { script {
+    def failure=params.FAIL_TEST ? '<failure message="intentional failure"/>' : ''
+    writeFile file:'test-reports/junit.xml', text:'<testsuite name="fixture" tests="1"><testcase name="gate">'+failure+'</testcase></testsuite>'
+    if(params.FAIL_TEST && !params.REPORT_ONLY_FAILURE) { error('Intentional test runner nonzero exit') }
+   } }
+   post { always { junit testResults:'test-reports/*.xml', allowEmptyResults:false, skipPublishingChecks:true } }
+  }
+  stage('Build image') { steps { echo 'SIMULATED_BUILD_REACHED' } }
+  stage('Publish') { steps { echo 'SIMULATED_PUBLICATION_REACHED' } }
+ }
+}""")
+            report['testGateBuilds'] = []
+            for number, failure, report_only in [(1, False, False), (2, True, False), (3, True, True)]:
+                endpoint = 'build' if number == 1 else 'buildWithParameters'
+                body = urllib.parse.urlencode({'FAIL_TEST': str(failure).lower(), 'REPORT_ONLY_FAILURE': str(report_only).lower()}).encode()
+                request('/job/isolated-test-gate/' + endpoint, body, 'application/x-www-form-urlencoded')
+                for _ in range(120):
+                    try:
+                        build = json.loads(request(f'/job/isolated-test-gate/{number}/api/json?tree=number,result,building'))
+                        if not build['building']:
+                            expected = 'UNSTABLE' if report_only else ('FAILURE' if failure else 'SUCCESS')
+                            if build['result'] != expected:
+                                raise RuntimeError('Test gate returned unexpected build result')
+                            tests = json.loads(request(f'/job/isolated-test-gate/{number}/testReport/api/json?tree=failCount,passCount,skipCount'))
+                            if sum(tests[key] for key in ('passCount', 'failCount', 'skipCount')) != 1 or tests['failCount'] != int(failure):
+                                raise RuntimeError('JUnit results were not recorded correctly')
+                            console = request(f'/job/isolated-test-gate/{number}/consoleText').decode()
+                            reached = 'SIMULATED_PUBLICATION_REACHED' in console
+                            if reached == failure or ('SIMULATED_BUILD_REACHED' in console) == failure:
+                                raise RuntimeError('Failed tests did not block build/publication')
+                            report['testGateBuilds'].append({'result':build['result'], 'tests':tests, 'publicationReached':reached})
+                            print(f'JUnit test gate #{number}: {build["result"]}; publication reached={reached}')
+                            break
+                    except urllib.error.HTTPError as exc:
+                        if exc.code != 404:
+                            raise
+                    time.sleep(.5)
+                else:
+                    raise RuntimeError('JUnit fixture exceeded 60 seconds')
             report['passed'] = True
             print('Isolated Declarative execution passed; application pipelines/deployments were not executed')
         finally:

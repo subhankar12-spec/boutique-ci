@@ -9,6 +9,7 @@ def call(Map config) {
             timeout(time: 60, unit: 'MINUTES')
             buildDiscarder(logRotator(numToKeepStr: '40', artifactNumToKeepStr: '30'))
             disableConcurrentBuilds()
+            skipStagesAfterUnstable()
             skipDefaultCheckout(true)
             copyArtifactPermission('boutique-promote')
         }
@@ -32,6 +33,7 @@ def call(Map config) {
                                 env.SOURCE_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                                 env.BUILD_CONTEXT = config.service == 'incident-bridge' ? 'monitoring/incident-bridge' : '.'
                                 env.IMAGE_TAG = "${env.REGISTRY}/${env.GITHUB_OWNER}/boutique-${config.service}:${env.SOURCE_COMMIT}"
+                                env.TEST_IMAGE = "${env.IMAGE_TAG}-test"
                             }
                         }
                     }
@@ -64,7 +66,30 @@ def call(Map config) {
                             archiveArtifacts artifacts:'chart.tgz,chart-render.yaml',fingerprint:true
                         }
                     }
-                    stage('Test and build') {
+                    stage('Test') {
+                        steps {
+                            sh '''set -eu
+                                mkdir -p test-reports
+                                docker build --pull --target test --tag "$TEST_IMAGE" "$BUILD_CONTEXT"
+                                docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp \
+                                    --cap-drop ALL --security-opt no-new-privileges:true \
+                                    --mount "type=bind,source=$WORKSPACE/test-reports,target=/reports" "$TEST_IMAGE"
+                            '''
+                        }
+                        post {
+                            always {
+                                script {
+                                    try {
+                                        junit testResults: 'test-reports/**/*.xml', allowEmptyResults: false, skipPublishingChecks: true
+                                    } finally {
+                                        archiveArtifacts artifacts: 'test-reports/**', allowEmptyArchive: true
+                                        sh 'docker image rm "$TEST_IMAGE" >/dev/null 2>&1 || true'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    stage('Build image') {
                         steps {
                             sh '''
                         set -eu
