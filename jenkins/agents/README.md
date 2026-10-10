@@ -10,10 +10,10 @@ hash/version checks. Pins require reviewed updates and image scans; they do
 not establish that an old version remains free of vulnerabilities.
 
 The snapshot endpoint `snapshot.debian.org` must be reachable during image
-builds. This cloud connection returned HTTP 403 for that endpoint. All eight
-downloaded tool distributions passed executable checks from `/tmp`, and Docker
-BuildKit's definition check passed; the complete image has not been built or
-scanned here because of restricted snapshot access and limited Docker storage.
+builds. A failed download or Dockerfile definition check does not establish a
+working image. Build and scan the complete image on your agent host and verify
+its tools before using it for delivery. Cloud component checks are documented
+in the platform repository's current validation guide.
 
 To verify tools independently, run the installer and add its `bin` directory to PATH:
 
@@ -85,6 +85,6 @@ An optional untrusted worker needs isolated infrastructure, credentials and a se
 
 ## Remote agents
 
-Expose each controller through authenticated TLS infrastructure and configure `JENKINS_RELEASE_URL` with the externally reachable HTTPS URLs before starting controller Compose. Remove `--network host` for remote agents and use their normal routed network. Import the actual organizational CA into the agent trust store when needed; do not disable certificate verification.
+Expose the controller through authenticated TLS infrastructure and configure `JENKINS_RELEASE_URL` with the externally reachable HTTPS URL before starting controller Compose. Remove `--network host` for remote agents and use their normal routed network. Import the actual organizational CA into the agent trust store when needed; do not disable certificate verification.
 
 Optional read-only verification needs network access to the cluster API and application TLS origins. Terraform agents use short-lived workload/instance-role credentials and a route to private EKS endpoints. Configure scoped Jenkins identities and permissions, node restrictions, controller backups, and reviewed GitHub credentials before enabling real delivery. The image and controller smoke check validate tooling/configuration; they do not provision remote agent VMs.
