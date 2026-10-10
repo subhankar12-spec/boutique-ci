@@ -147,14 +147,14 @@ warnings.values().each { println(it) }
                 raise RuntimeError('JCasC validation failed; inspect jcasc-check.txt')
             print(result.strip())
 
-            role_paths = {role: str(ROOT / f'jenkins/jobs/{role}.groovy') for role in ('validation', 'release')}
+            role_paths = {role: str(ROOT / f'jenkins/jobs/{role}.groovy') for role in ('release',)}
             result = groovy('''import javaposse.jobdsl.plugin.JenkinsJobManagement
 import javaposse.jobdsl.dsl.DslScriptLoader
 import javaposse.jobdsl.dsl.Item
 import jenkins.model.Jenkins
 class DryRunJobManagement extends JenkinsJobManagement {
  Map<String,String> generated=[:]
- DryRunJobManagement() { super(System.out,[:],new File('.')); setFailOnMissingPlugin(true) }
+ DryRunJobManagement() { super(System.out,[suppressAutomaticBuilds:true],new File('.')); setFailOnMissingPlugin(true) }
  @Override boolean createOrUpdateConfig(Item item, boolean ignoreExisting) { generated[item.name]=item.xml; return true }
  @Override void queueJob(String name) { throw new IllegalStateException('SCM/build scheduling is forbidden in this dry run') }
 }
@@ -166,6 +166,7 @@ roles.each { role,path ->
   def document=new XmlParser(false,false).parseText(xml)
   def source=document.sources.data.'jenkins.branch.BranchSource'.source
   if(source.size()) {
+   assert document.sources.data.'jenkins.branch.BranchSource'.strategy.properties.'jenkins.branch.NoTriggerBranchProperty'.triggeredBranchesRegex.text() == '^$': 'Bootstrap must suppress automatic builds'
    def original=source[0]
    def type=original.attribute('class')
    original.attributes().remove('class')
@@ -187,7 +188,7 @@ roles.each { role,path ->
 }
 ''')
             (runtime / 'job-dsl-check.txt').write_text(result)
-            if 'JOBDSL_CHECK_PASSED validation' not in result or 'JOBDSL_CHECK_PASSED release' not in result:
+            if 'JOBDSL_CHECK_PASSED release' not in result:
                 raise RuntimeError('JobDSL validation failed; inspect job-dsl-check.txt')
             print(result.strip())
 

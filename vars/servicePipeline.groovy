@@ -10,9 +10,9 @@ def call(Map config) {
             buildDiscarder(logRotator(numToKeepStr: '40', artifactNumToKeepStr: '30'))
             disableConcurrentBuilds()
             skipDefaultCheckout(true)
-            copyArtifactPermission('boutique-promote,boutique-rollback,boutique-bootstrap')
+            copyArtifactPermission('boutique-promote')
         }
-        parameters { booleanParam(name: 'DELIVER_TO_DEV', defaultValue: true, description: 'Disable only for the initial four-service bootstrap release') }
+        parameters { booleanParam(name: 'DELIVER_TO_DEV', defaultValue: true, description: 'Open a reviewed dev GitOps PR after publication') }
         environment {
             SERVICE = "${config.service}"
             REGISTRY = 'ghcr.io'
@@ -127,56 +127,27 @@ def call(Map config) {
                                 env.RELEASE_IMAGE = readFile('image-digest.txt').trim()
                                 if (!(env.RELEASE_IMAGE ==~ /ghcr\.io\/subhankar12-spec\/boutique-[a-z-]+@sha256:[a-f0-9]{64}/)) { error('Missing immutable registry digest') }
                             }
-                            sh '''python3 - <<'RELEASE'
-import hashlib,json,os,re
-from pathlib import Path
-record={"schema_version":2,"service":os.environ["SERVICE"],"image":os.environ["RELEASE_IMAGE"],"source_commit":os.environ["SOURCE_COMMIT"],"build_url":os.environ["BUILD_URL"],"tests_passed":True,"security_gate_passed":True,"sbom_sha256":hashlib.sha256(Path("sbom.json").read_bytes()).hexdigest(),"scan_sha256":hashlib.sha256(Path("image-scan.json").read_bytes()).hexdigest()}
-if os.environ["SERVICE"]!="incident-bridge":
-    matches=re.findall(r"Digest: (sha256:[a-f0-9]{64})",Path("chart-push.log").read_text())
-    if len(matches)!=1:raise SystemExit("Missing chart OCI digest")
-    record["chart"]={"name":"boutique-"+os.environ["SERVICE"],"repository":"oci://ghcr.io/subhankar12-spec/charts","version":"0.1.0-"+os.environ["SOURCE_COMMIT"],"package_sha256":hashlib.sha256(Path("chart.tgz").read_bytes()).hexdigest(),"oci_digest":matches[0]}
-Path("release.json").write_text(json.dumps(record,indent=2)+"\\n")
-RELEASE
-                    '''
-                            dir('delivery-tools') {
-                                checkout([$class:'GitSCM', branches:[[name:'main']], userRemoteConfigs:[[url:'https://github.com/subhankar12-spec/boutique-gitops.git', credentialsId:'github-read']]])
-                            }
-                            script {
-                                env.DEV_BASELINE_READY = sh(script: '''python3 - <<'BASELINE'
-import sys
-sys.path.insert(0,'delivery-tools/scripts')
-from evidence import ROOT,selected_image
-print(str(all('@sha256:' in selected_image(ROOT,s,'dev') for s in ('frontend','catalogue','cart','orders'))).lower())
-BASELINE
-                                ''', returnStdout:true).trim()
-                                if (env.DEV_BASELINE_READY != 'true') {
-                                    echo 'Initial dev application requires boutique-bootstrap; published artifacts are available for its aggregate release.'
-                                }
-                            }
-                            withCredentials([file(credentialsId:'release-artifact-signing-key', variable:'RELEASE_SIGNING_KEY')]) {
-                                sh 'python3 delivery-tools/scripts/release_attestation.py sign --record release.json --signing-key "$RELEASE_SIGNING_KEY" --output release-attestation.json'
-                            }
-                            archiveArtifacts artifacts: 'release.json,release-attestation.json,image-digest.txt,sbom.json,image-scan.json,chart.tgz', fingerprint: true, allowEmptyArchive: true
+                            sh 'printf "%s\\n" "$SOURCE_COMMIT" > source-commit.txt'
+                            archiveArtifacts artifacts: 'image-digest.txt,source-commit.txt,sbom.json,image-scan.json,chart.tgz', fingerprint: true, allowEmptyArchive: true
                         }
                     }
 
                 }
                 post {
                     always {
-                        archiveArtifacts artifacts: 'image.txt,release.json,release-attestation.json,image-digest.txt,sbom.json,image-scan.json,chart.tgz', allowEmptyArchive: true
+                        archiveArtifacts artifacts: 'image.txt,image-digest.txt,source-commit.txt,sbom.json,image-scan.json,chart.tgz', allowEmptyArchive: true
                         sh 'rm -rf .docker'
                     }
                 }
             }
             stage('Deliver to dev') {
-                when { expression { isRelease() && config.service != 'incident-bridge' && params.DELIVER_TO_DEV && env.DEV_BASELINE_READY == 'true' } }
+                when { expression { isRelease() && config.service != 'incident-bridge' && params.DELIVER_TO_DEV } }
                 steps {
                     build job: 'boutique-promote', wait: true, propagate: true, parameters: [
                     string(name: 'TARGET', value: 'dev'),
                     string(name: 'SERVICE', value: config.service),
                     string(name: 'IMAGE', value: env.RELEASE_IMAGE),
-                    string(name: 'RELEASE_BUILD', value: env.BUILD_NUMBER),
-                    booleanParam(name: 'AUTO_MERGE_DEV', value: true)
+                    string(name: 'RELEASE_BUILD', value: env.BUILD_NUMBER)
                     ]
                 }
             }

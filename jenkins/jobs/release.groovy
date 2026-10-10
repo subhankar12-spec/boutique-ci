@@ -36,7 +36,7 @@ def suppressBuilds = binding.hasVariable('suppressAutomaticBuilds') && binding.g
   triggers { periodicFolderTrigger { interval('1d') } }
  }
 }
-['promote','verify','rollback','gitops-check','bootstrap'].each { job ->
+['promote','verify','rollback','gitops-validate'].each { job ->
  pipelineJob("boutique-${job}") {
   definition {
    cpsScm {

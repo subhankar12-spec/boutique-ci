@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "Boutique CI \u2014 isolated agents, reviewed deployments"
+  systemMessage: "Boutique CI - reviewed builds and GitOps delivery"
   numExecutors: 0
   mode: EXCLUSIVE
   securityRealm:
@@ -33,8 +33,6 @@ jenkins:
         value: ${BOUTIQUE_STAGING_ORIGIN}
       - key: BOUTIQUE_PRODUCTION_ORIGIN
         value: ${BOUTIQUE_PRODUCTION_ORIGIN}
-      - key: BOUTIQUE_GITOPS_REQUIRED_CHECK
-        value: ${BOUTIQUE_GITOPS_REQUIRED_CHECK}
 unclassified:
   location:
     url: ${JENKINS_URL}

@@ -1,36 +1,63 @@
-# Jenkins delivery
+# Boutique Jenkins CI and GitOps delivery
 
-This repository provides the shared service pipeline, two-controller configuration and the common deployment jobs for the Boutique project. Each application service remains in its own repository. See [Jenkins setup](../boutique-platform/docs/jenkins-setup.md) for installation, credentials and branch protection.
+One Jenkins controller with zero built-in executors runs reviewed main builds on
+an inbound `trusted-release` agent. Each service has a Jenkinsfile calling the
+version-pinned, sandboxed shared library. Independent service repositories remain.
 
-`vars/servicePipeline.groovy` supplies both PR validation and protected-main release behavior. Validation runs on disposable agents attached to the validation controller. Protected-main builds run on the release controller, execute Dockerfile tests, scan source secrets and the runtime image, generate a CycloneDX SBOM, then package/publish the service-owned Helm chart and tested image to GHCR and sign their combined release record. Fixable HIGH/CRITICAL findings fail the image gate; unfixed findings remain visible for review. Source-SHA tags are not overwritten.
+The shared pipeline checks out source, runs a secret scan, validates/packages
+Helm, builds the Dockerfile (including its test stages), scans the runtime image,
+generates an SBOM and publishes a source-tagged image and chart to GHCR. Artifacts
+include the immutable image digest, source commit, scan/SBOM and chart package.
+Existing source tags/chart versions are not overwritten.
 
-Four application services normally trigger dev delivery after publication once a complete digest-based dev baseline exists. For the first complete installation, build each with `DELIVER_TO_DEV=false`, then use `boutique-bootstrap` to collect their signed artifacts and create one complete dev change. Initialize staging and production through the same aggregate job with matching preceding-environment evidence before switching those environments to individual service promotion. `boutique-platform/main` also releases the incident adapter, including its real PostgreSQL queue integration tests; monitoring image selection remains an explicit reviewed GitOps change.
+For application services, `DELIVER_TO_DEV=true` opens a GitOps PR via
+`boutique-promote`. The publishing executor is released before the child runs.
+Jenkins does not merge the PR or directly deploy application manifests.
+The Jenkins manifest check validates the PR; protected review/merge and Argo CD
+perform delivery. A published build is not proof of successful deployment.
 
-## Shared jobs
+| Job | Purpose |
+| --- | --- |
+| Pipeline seed | Run reviewed Job DSL; suppress automatic service builds during setup |
+| Four service/main jobs | Test, scan, package, publish and optionally propose dev deployment |
+| `boutique-promote` | Select a dev publishing build or copy the same image/chart from dev to staging, staging to production; open PR |
+| `boutique-rollback` | Restore a service's prior image/chart from protected Git history through a PR |
+| `boutique-gitops-validate` | Validate PR manifests with protected tools and report commit status; no separate executor |
+| `boutique-verify` | Read Argo/rollout state and run functional smoke tests; archive reports |
+| `boutique-platform/main` | Optional ServiceNow incident-adapter build |
+| `boutique-infrastructure` | Optional AWS Terraform plan/approved apply on separately authorized infrastructure agent |
 
-| Job | Behavior |
-|---|---|
-| `boutique-bootstrap` | Collect four signed releases and preceding-environment evidence, prepare an initial environment PR and verify each digest |
-| `boutique-promote` | Verify release provenance and preceding-environment evidence, review production approval, merge a GitOps PR and verify rollout |
-| `boutique-gitops-check` | Use protected tools to validate signed delivery records, current PR base and rendered resources; publish `boutique/gitops-policy` |
-| `boutique-verify` | Wait for Argo/rollouts, check native runtime images, run HTTPS smoke tests and sign measured evidence |
-| `boutique-rollback` | Restore a previously verified same-environment digest through a reviewed GitOps PR and fresh verification |
-| `boutique-infrastructure` | Plan Terraform, archive a redacted action summary and optionally approve/apply the exact private saved plan |
+Promotion does not rebuild. Human review confirms preceding-environment smoke
+results and database migration compatibility. Protect GitOps main with the
+`boutique/gitops-validation` check and independent review. Use a separate bot identity
+for PR creation; self-approval is not independent review.
 
-The release and delivery parents use `agent none` outside their working stages, freeing executors before waiting for deployment verification. Promotion and rollback hold a common environment lock through verification. The policy job uses a separate `policy-check` executor while the deployment workspace waits for it. Provision that executor; assigning policy work to the occupied deploy executor would deadlock.
+The seed is **Pipeline from SCM**, pinned to a reviewed full CI commit, with
+script path `pipelines/seed-release.Jenkinsfile`. Its
+`SUPPRESS_AUTOMATIC_BUILDS` defaults to true. Old bootstrap/policy jobs are no
+longer generated; the seed deliberately does not delete unrelated existing jobs.
+Disable obsolete jobs before using the simplified flow.
 
-The two controllers form the credential boundary. PR-controlled code runs only on validation, which receives no registry publishing, GitOps write, private signing or cloud credentials. The shared library is configured as an untrusted Jenkins library with a reviewed pinned commit and version overrides disabled. Protect its source, trusted job definitions and policy tools with review and CODEOWNERS.
+Required credentials are `github-read`, `ghcr-publish`, `gitops-pr` and the
+GitOps-scoped `gitops-checks` Secret text token for standard manifest statuses.
+Verification additionally uses read-only environment kubeconfigs and public TLS
+CA files. No artifact/evidence signing keys are required.
+See [Jenkins setup](https://github.com/subhankar12-spec/boutique-platform/blob/main/docs/jenkins-setup.md)
+and [the existing Debian/kind deployment guide](https://github.com/subhankar12-spec/boutique-platform/blob/main/docs/deploy-cicd-kind.md).
 
-## Runtime and plugin maintenance
+PR/fork discovery is disabled on the credentialed controller. Before enabling
+untrusted builds, provide disposable isolated workers and ensure those jobs have
+no publishing, GitOps-write, cluster or cloud credentials. A label, sandbox or
+custom controller-role variable alone is not a security boundary.
 
-The controller pins Jenkins 2.580.1 and a checksum-locked set of 74 plugin artifacts. `jenkins/scripts/install-locked-plugins.py` verifies official SHA-256 values, rather than resolving floating plugin versions during every build. Review and exercise dependency upgrades before regenerating the lock with `scripts/lock-plugins.py`.
+The controller core/plugins and agent tools remain checksum-locked. Validate
+changes with the isolated controller harness; it does not publish or deploy:
 
 ```bash
 python3 jenkins/scripts/doctor.py
-install -d -m 700 /tmp/boutique-jenkins-check
 python3 jenkins/scripts/smoke-controller.py --directory /tmp/boutique-jenkins-check
 ```
 
-The repeatable smoke command requires Java 21, a private external cache and official archive access. It checks the locked runtime, JCasC, plugin-backed Declarative/Job DSL behavior and isolated job coordination without real GitHub/cloud credentials. These checks have been exercised on the cloud runner. They do not establish GHCR publication, remote agent provisioning or Jenkins-to-cluster delivery. See [validation evidence](../boutique-platform/docs/validation.md) for the remaining acceptance work.
-
-Helm chart packages and OCI digests are bound to the source commit in version-2 release attestations. Promotions move the exact signed package and image together; see [Helm delivery](../boutique-gitops/docs/helm-delivery.md). The infrastructure job also supports the once-per-account `audit` Terraform root.
+The single-controller Compose profile is for a fresh install; it preserves the
+previous release-home volume name and does not migrate a manually created Jenkins
+container. Preserve existing homes and private credentials during upgrades.

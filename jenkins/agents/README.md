@@ -28,7 +28,14 @@ archive-traversal rejection checks. The Dockerfile-specific ignore file limits
 its build context to the installer and build definition, excluding controller
 credentials/configuration and Git.
 
-Use separate disposable Linux VMs for validation and trusted release work. Never share workspaces, Docker daemons or credentials between those trust boundaries. The controllers have zero executors. Create inbound nodes with the appropriate labels: `isolated-builder`, `trusted-release`, `trusted-deploy`, `policy-check`, and `terraform-trusted`. Dispose of untrusted PR agents after every build.
+The controller has zero executors. For reviewed main builds, create one private
+inbound agent with label `trusted-release` and one executor. The Pipeline seed,
+promotion, rollback and optional read-only verifier use the same label. An
+optional `terraform-trusted` worker handles separately authorized AWS work.
+PR/fork discovery is disabled. Before enabling arbitrary PRs, provision
+disposable isolated workers without publishing, GitOps-write, cluster or cloud
+credentials; never share their daemon/workspace with reviewed release work.
+Labels and the Groovy sandbox are not credential/security isolation.
 
 Build the common agent image from the `boutique-ci` repository root:
 
@@ -36,7 +43,7 @@ Build the common agent image from the `boutique-ci` repository root:
 docker build --pull --platform linux/amd64 -f jenkins/agents/Dockerfile -t boutique-agent:local .
 ```
 
-Build agents connect to a dedicated rootless Docker daemon owned by their user. Follow Docker's supported distribution instructions to start that daemon; mount its Unix socket into the agent and set `DOCKER_HOST` to the mounted socket. Mounting a Docker socket gives control over that daemon, even with a read-only bind mount. Never mount the controller host's rootful Docker socket. Deploy, protected policy-check, and Terraform agents do not need a Docker socket. The policy-check node runs protected validation tools with only the scoped GitHub checks credential; keep it separate from arbitrary PR builds.
+Build agents connect to a dedicated rootless Docker daemon owned by their user. Follow Docker's supported distribution instructions to start that daemon; mount its Unix socket into the agent and set `DOCKER_HOST` to the mounted socket. Mounting a Docker socket gives control over that daemon, even with a read-only bind mount. Never mount the controller host's rootful Docker socket. The optional Terraform worker does not need a Docker socket. GitOps manifest validation uses the same reviewed worker and protected tools; it never executes candidate shell/Jenkins scripts.
 
 Docker-using container agents must mount their workspace at the same absolute path that the Docker daemon sees on its host. Integration checks bind configuration and temporary fixtures by that path. Alternatively, run the inbound agent directly on its dedicated VM. A private remote daemon without shared workspace files cannot run those bind-mounted checks.
 
@@ -49,14 +56,23 @@ The controller Compose ports bind to loopback. On Linux, host networking lets a 
 ```bash
 : "${BOUTIQUE_AGENT_SECRET_FILE:?Set the private agent-secret file path}"
 : "${BOUTIQUE_AGENT_WORKSPACE:?Set the node private workspace path}"
-docker run --rm --name boutique-trusted-deploy --network host \
-  --user "$(id -u):$(id -g)" \
+: "${BOUTIQUE_AGENT_DOCKER_SOCKET:?Set the private rootless Docker socket path}"
+test "$(stat -c %u "$BOUTIQUE_AGENT_DOCKER_SOCKET")" -ne 0
+install -d -m 700 -o "$(stat -c %u "$BOUTIQUE_AGENT_DOCKER_SOCKET")" \
+  -g "$(stat -c %g "$BOUTIQUE_AGENT_DOCKER_SOCKET")" "$BOUTIQUE_AGENT_WORKSPACE/.agent-home"
+docker run --rm --name boutique-build-agent --network host \
+  --user "$(stat -c %u "$BOUTIQUE_AGENT_DOCKER_SOCKET"):$(stat -c %g "$BOUTIQUE_AGENT_DOCKER_SOCKET")" \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  -e JAVA_TOOL_OPTIONS="-Xmx256m -Duser.home=/home/jenkins" \
   -e JENKINS_URL="${JENKINS_RELEASE_URL:-http://127.0.0.1:8091/}" \
-  -e JENKINS_AGENT_NAME=boutique-trusted-deploy \
+  -e JENKINS_AGENT_NAME=boutique-build-agent \
   -e JENKINS_WEB_SOCKET=true \
-  -e JENKINS_AGENT_WORKDIR=/workspace \
+  -e JENKINS_AGENT_WORKDIR="$BOUTIQUE_AGENT_WORKSPACE" \
+  -e DOCKER_HOST=unix:///run/rootless-docker.sock \
   -v "$BOUTIQUE_AGENT_SECRET_FILE:/run/secrets/agent-secret:ro" \
-  -v "$BOUTIQUE_AGENT_WORKSPACE:/workspace" \
+  -v "$BOUTIQUE_AGENT_WORKSPACE:$BOUTIQUE_AGENT_WORKSPACE" \
+  -v "$BOUTIQUE_AGENT_DOCKER_SOCKET:/run/rootless-docker.sock:ro" \
+  -v "$BOUTIQUE_AGENT_WORKSPACE/.agent-home:/home/jenkins" \
   boutique-agent:local -secret @/run/secrets/agent-secret
 ```
 
@@ -65,10 +81,10 @@ The explicit `-secret @/run/secrets/agent-secret` argument makes Remoting read
 the mounted file without putting the secret value in Docker environment settings
 or the host command line.
 
-For validation use its separately registered node name, the validation controller URL (port 8090), and a separate secret/workspace. WebSocket mode needs no exposed TCP remoting port. Agent secrets are generated for Jenkins nodes; they are not GitHub tokens or registry credentials.
+An optional untrusted worker needs isolated infrastructure, credentials and a separate private daemon/workspace before PR discovery is enabled. WebSocket mode needs no exposed TCP remoting port. Agent secrets are generated for Jenkins nodes; they are not GitHub tokens or registry credentials.
 
 ## Remote agents
 
-Expose each controller through authenticated TLS infrastructure and configure `JENKINS_VALIDATION_URL` / `JENKINS_RELEASE_URL` with the externally reachable HTTPS URLs before starting controller Compose. Remove `--network host` for remote agents and use their normal routed network. Import the actual organizational CA into the agent trust store when needed; do not disable certificate verification.
+Expose each controller through authenticated TLS infrastructure and configure `JENKINS_RELEASE_URL` with the externally reachable HTTPS URLs before starting controller Compose. Remove `--network host` for remote agents and use their normal routed network. Import the actual organizational CA into the agent trust store when needed; do not disable certificate verification.
 
-Trusted deploy agents need network access to the cluster API and application TLS origins. Terraform agents use short-lived workload/instance-role credentials and a route to private EKS endpoints. Configure scoped Jenkins identities and permissions, node restrictions, controller backups, and reviewed GitHub credentials before enabling real delivery. The image and controller smoke check validate tooling/configuration; they do not provision remote agent VMs.
+Optional read-only verification needs network access to the cluster API and application TLS origins. Terraform agents use short-lived workload/instance-role credentials and a route to private EKS endpoints. Configure scoped Jenkins identities and permissions, node restrictions, controller backups, and reviewed GitHub credentials before enabling real delivery. The image and controller smoke check validate tooling/configuration; they do not provision remote agent VMs.
