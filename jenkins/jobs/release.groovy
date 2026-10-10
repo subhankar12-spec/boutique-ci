@@ -1,3 +1,5 @@
+// The Pipeline seed defaults to manual builds while initial delivery is configured.
+def suppressBuilds = binding.hasVariable('suppressAutomaticBuilds') && binding.getVariable('suppressAutomaticBuilds')
 ['frontend','catalogue','cart','orders','platform'].each { service ->
  multibranchPipelineJob("boutique-${service}") {
   branchSources {
@@ -22,6 +24,13 @@
    def traits = sourceNode / traits
    traits << 'org.jenkinsci.plugins.github_branch_source.BranchDiscoveryTrait' { strategyId(3) }
    traits << 'jenkins.scm.impl.trait.WildcardSCMHeadFilterTrait' { includes('main'); excludes('') }
+   if (suppressBuilds) {
+    def branchSource = node / sources / data / 'jenkins.branch.BranchSource'
+    branchSource.children().removeAll { child -> child instanceof groovy.util.Node && child.name() == 'strategy' }
+    branchSource.appendNode('strategy', [class: 'jenkins.branch.DefaultBranchPropertyStrategy'])
+      .appendNode('properties').appendNode('jenkins.branch.NoTriggerBranchProperty')
+      .appendNode('triggeredBranchesRegex', '^$')
+   }
   }
   orphanedItemStrategy { discardOldItems { numToKeep(10) } }
   triggers { periodicFolderTrigger { interval('1d') } }
